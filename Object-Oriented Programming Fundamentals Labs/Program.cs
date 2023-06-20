@@ -1,4 +1,8 @@
-﻿class Program
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+class Program
 {
     static void Main(string[] args)
     {
@@ -10,7 +14,7 @@
         }
 
         // Create a new instance of the VendingMachine class
-        VendingMachine vendingMachine = new VendingMachine(1);
+        VendingMachine vendingMachine = new VendingMachine();
 
         // Stock the inventory with the "Chocolate-covered Beans" product and quantity
         Console.WriteLine(vendingMachine.StockItem(new Product("Chocolate-covered Beans", 2, "A12"), 3));
@@ -23,17 +27,19 @@
         Console.WriteLine(vendingMachine.VendItem("A12", money));
 
         // Display the updated quantities in the inventory
-        foreach (Product product in vendingMachine.Inventory.Keys)
+        foreach (Product product in vendingMachine.GetInventoryProducts())
         {
-            int quantity = vendingMachine.Inventory[product];
+            int quantity = vendingMachine.GetInventoryQuantity(product);
             Console.WriteLine($"Product Name: {product.Name}, Quantity: {quantity}, Code: {product.Code}");
         }
 
         // Display the updated quantities in the money float
-        foreach (KeyValuePair<int, int> kvp in vendingMachine.MoneyFloat)
+        foreach (KeyValuePair<int, int> kvp in vendingMachine.GetMoneyFloat())
         {
             Console.WriteLine($"Denomination: ${kvp.Key}, Quantity: {kvp.Value}");
         }
+
+        Console.ReadLine();
     }
 
     // Generate a list of fixed products
@@ -77,16 +83,21 @@
     // Represents a vending machine
     public class VendingMachine
     {
+        private static int NextSerialNumber = 1;
+
         public int SerialNumber { get; }
-        public Dictionary<int, int> MoneyFloat { get; }
-        public Dictionary<Product, int> Inventory { get; }
+        public string Barcode { get; }
 
-        // Constructor to initialize vending machine properties
-        public VendingMachine(int serialNumber)
+        private Dictionary<int, int> MoneyFloat { get; }
+        private Dictionary<Product, int> Inventory { get; }
+
+        public VendingMachine()
         {
-            SerialNumber = serialNumber;
+            SerialNumber = NextSerialNumber;
+            NextSerialNumber++;
 
-            // Initialize the money float with different denominations and quantities
+            Barcode = GenerateBarcode();
+
             MoneyFloat = new Dictionary<int, int>
             {
                 { 1, 0 },
@@ -96,11 +107,15 @@
                 { 20, 0 }
             };
 
-            // Initialize the inventory dictionary
             Inventory = new Dictionary<Product, int>();
         }
 
-        // Stock a product in the inventory with a given quantity
+        private string GenerateBarcode()
+        {
+            string barcode = $"VM{SerialNumber.ToString("D5")}";
+            return barcode;
+        }
+
         public string StockItem(Product product, int quantity)
         {
             if (Inventory.ContainsKey(product))
@@ -115,7 +130,6 @@
             return $"Added {quantity} {product.Name} ({product.Code}) for ${product.Price} each to inventory.";
         }
 
-        // Stock the money float with a given denomination and quantity
         public string StockFloat(int moneyDenomination, int quantity)
         {
             MoneyFloat[moneyDenomination] += quantity;
@@ -130,62 +144,45 @@
             return floatStock;
         }
 
-        // Perform the vending process by entering a code and inserting money
         public string VendItem(string code, List<int> money)
         {
-            // Check if the item with the given code exists in the inventory
-            if (!Inventory.ContainsKey(Inventory.Keys.FirstOrDefault(p => p.Code == code)))
+            Product product = Inventory.Keys.FirstOrDefault(p => p.Code == code);
+            if (product == null)
             {
                 return $"Error: No item with code {code} found.";
             }
 
-            // Get the product with the given code from the inventory
-            Product product = Inventory.Keys.FirstOrDefault(p => p.Code == code);
-            int quantity = Inventory[product];
-
-            // Check if the product is out of stock
-            if (quantity == 0)
+            int quantity;
+            if (!Inventory.TryGetValue(product, out quantity))
             {
                 return $"Error: {product.Name} ({product.Code}) is out of stock.";
             }
 
-            // Calculate the total amount of money inserted
             int totalMoney = money.Sum();
 
-            // Check if the funds provided are sufficient
             if (totalMoney < product.Price)
             {
                 return $"Error: Insufficient funds provided. {product.Name} ({product.Code}) costs ${product.Price}.";
             }
 
-            // Calculate the change to be returned
             int change = totalMoney - product.Price;
             Dictionary<int, int> changeCoins = CalculateChange(change);
 
-            // Check if there is enough change available
             if (!HasEnoughChange(changeCoins))
             {
                 return $"Error: Not enough change available to complete the transaction. Please try again later.";
             }
 
-            // Reduce the quantity in the inventory and update the money float
             Inventory[product]--;
             foreach (KeyValuePair<int, int> kvp in changeCoins)
             {
                 MoneyFloat[kvp.Key] -= kvp.Value;
             }
 
-            string changeString = "";
-            foreach (KeyValuePair<int, int> kvp in changeCoins)
-            {
-                changeString += $"{kvp.Value} x ${kvp.Key}, ";
-            }
-            changeString = changeString.TrimEnd(',', ' ');
-
+            string changeString = string.Join(", ", changeCoins.Select(kvp => $"{kvp.Value} x ${kvp.Key}"));
             return $"Enjoy your {product.Name} ({product.Code}) and take your change: {changeString}.";
         }
 
-        // Calculate the change to be returned based on the given amount
         private Dictionary<int, int> CalculateChange(int change)
         {
             Dictionary<int, int> changeCoins = new Dictionary<int, int>
@@ -244,6 +241,21 @@
             }
 
             return true;
+        }
+
+        public IEnumerable<Product> GetInventoryProducts()
+        {
+            return Inventory.Keys;
+        }
+
+        public int GetInventoryQuantity(Product product)
+        {
+            return Inventory.TryGetValue(product, out int quantity) ? quantity : 0;
+        }
+
+        public Dictionary<int, int> GetMoneyFloat()
+        {
+            return new Dictionary<int, int>(MoneyFloat);
         }
     }
 }
